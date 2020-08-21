@@ -1,3 +1,3 @@
-# Attention is all you need: A Pytorch Implementation
+# Implementation of "Attention is All You Need"
 
-Borrows heavily from [this repo](https://github.com/jadore801120/attention-is-all-you-need-pytorch).
+Borrows very heavily from [this repo](https://github.com/jadore801120/attention-is-all-you-need-pytorch).
