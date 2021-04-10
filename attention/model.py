@@ -2,6 +2,7 @@ import unittest
 import math
 
 import torch
+from torch import Tensor
 import torch.nn as nn
 
 
@@ -9,9 +10,9 @@ class AttentionLayer(nn.Module):
 
     def __init__(
         self,
-        dmodel,
-        dk,
-        dv
+        dmodel: int,
+        dk: int,
+        dv: int
     ):
         super().__init__()
         self.similarity_norm = math.sqrt(dk)
@@ -21,19 +22,19 @@ class AttentionLayer(nn.Module):
         self.softmax = nn.Softmax(dim=2)
 
     @staticmethod
-    def causal_mask(x):
+    def causal_mask(x: Tensor) -> Tensor:
         mask = -torch.triu(float("inf")*torch.ones_like(x), diagonal=1)
         return x + mask
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         """
         Parameters
         ----------
-        x: Tensor(size=(batch, nx, dmodel)
+        x: Tensor(size=(batch, nx, dmodel))
 
         Returns
         -------
-        y: Tensor(size=(batch, nx, dv)
+        Tensor(size=(batch, nx, dv))
         """
         Q = self.query_xf(x)  # (batch, nx, dk)
         K = self.key_xf(x)  # (batch, nx, dk)
@@ -50,10 +51,10 @@ class MultiHeadAttentionLayer(nn.Module):
 
     def __init__(
         self,
-        dmodel,
-        num_heads,
-        dk=None,
-        dv=None
+        dmodel: int,
+        num_heads: int,
+        dk: int = None,
+        dv: int = None
     ):
         super().__init__()
         dk = dk or dmodel
@@ -64,7 +65,16 @@ class MultiHeadAttentionLayer(nn.Module):
         ])
         self.output_layer = nn.Linear(num_heads*dv, dmodel)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        x: Tensor(size=(batch, nx, dmodel))
+
+        Returns
+        -------
+        Tensor(size=(batch, nx, dmodel))
+        """
         y = torch.cat([head(x) for head in self.heads], dim=-1)
         y = self.output_layer(y)
         return y
@@ -72,13 +82,22 @@ class MultiHeadAttentionLayer(nn.Module):
 
 class PositionwiseFeedForward(nn.Module):
 
-    def __init__(self, dmodel, dhidden):
+    def __init__(self, dmodel: int, dhidden: int):
         super().__init__()
         self.linear_input = nn.Linear(dmodel, dhidden)
         self.linear_output = nn.Linear(dhidden, dmodel)
         self.relu = nn.ReLU()
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        x: Tensor(size=(batch, nx, dmodel))
+
+        Returns
+        -------
+        Tensor(size=(batch, nx, dmodel))
+        """
         x = self.linear_input(x)
         x = self.relu(x)
         return self.linear_output(x)
@@ -88,40 +107,48 @@ class TransformerLayer(nn.Module):
 
     def __init__(
         self,
-        dmodel,
-        num_heads,
-        dim_feedforward
+        dmodel: int,
+        num_heads: int,
+        dim_feedforward: int
     ):
         super().__init__()
         self.attention = MultiHeadAttentionLayer(
             dmodel=dmodel,
             num_heads=num_heads
         )
+        self.layer_norm_attention = nn.LayerNorm(dmodel, dim_feedforward)
+
         self.feedforward = PositionwiseFeedForward(
             dmodel=dmodel,
             dhidden=dim_feedforward
         )
-        self.layer_norm_attention = nn.LayerNorm(dmodel, dim_feedforward)
         self.layer_norm_feedforward = nn.LayerNorm(dmodel)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        x: Tensor(size=(batch, nx, dmodel))
+
+        Returns
+        -------
+        Tensor(size=(batch, nx, dmodel))
+        """
         x = self.attention(x) + x
         x = self.layer_norm_attention(x)
-        x = x + self.feedforward(x)
+        x = self.feedforward(x) + x
         x = self.layer_norm_feedforward(x)
         return x
 
 
-class TransformerModel(nn.Module):
+class Transformer(nn.Module):
 
     def __init__(
         self,
-        dmodel,
-        num_heads,
-        num_layers,
-        dim_feedforward,
-        num_classes,
-        device
+        dmodel: int,
+        num_heads: int,
+        num_layers: int,
+        dim_feedforward: int,
     ):
         super().__init__()
         self.layers = nn.ModuleList([
@@ -132,16 +159,58 @@ class TransformerModel(nn.Module):
             )
             for _ in range(num_layers)
         ])
-        self.output_layer = nn.Linear(dmodel, num_classes)
-        self.softmax = nn.Softmax(dim=-1)
-        self.to(device)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        x: Tensor(size=(batch, nx, dmodel))
+
+        Returns
+        -------
+        Tensor(size=(batch, nx, dmodel))
+        """
         for layer in self.layers:
             x = layer(x)
-        y = self.output_layer(x)
-        y = self.softmax(y)
-        return y
+        return x
+
+
+class LanguageModel(nn.Module):
+
+    def __init__(
+        self,
+        embedding_size: int,
+        vocab_size: int,
+        num_heads: int,
+        num_layers: int,
+        dim_feedforward: int
+    ):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embedding_size)
+        self.transfomer = Transformer(
+            dmodel=embedding_size,
+            num_heads=num_heads,
+            num_layers=num_layers,
+            dim_feedforward=dim_feedforward
+        )
+        self.output_layer = nn.Linear(embedding_size, vocab_size)
+        self.softmax = nn.Softmax(dim=2)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        x: Tensor(size=(batch, nx, embedding_size))
+
+        Returns
+        -------
+        Tensor(size=(batch, nx, embedding_size))
+        """
+        x = self.embedding(x)
+        x = self.transfomer(x)
+        x = self.output_layer(x)
+        x = self.softmax(x)
+        return x
 
 
 # pylint: disable=R0902
@@ -152,7 +221,6 @@ class TransformTester(unittest.TestCase):
         self.num_heads = 3
         self.num_layers = 5
         self.dim_feedforward = 7
-        self.num_classes = 9
         self.batch_size = 11
         self.seq_len = 13
         self.dk = 17
@@ -205,17 +273,16 @@ class TransformTester(unittest.TestCase):
         y = ff(self.x)
         self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.dmodel))
 
-    def test_transformer_model(self):
-        tm = TransformerModel(
+    def test_transformer(self):
+        tm = Transformer(
             dmodel=self.dmodel,
             num_heads=self.num_heads,
             num_layers=self.num_layers,
             dim_feedforward=self.dim_feedforward,
-            num_classes=self.num_classes,
             device=self.device
         )
         y = tm(self.x)
-        self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.num_classes))
+        self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.dmodel))
 
 
 if __name__ == "__main__":
