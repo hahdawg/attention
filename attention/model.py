@@ -1,4 +1,3 @@
-import unittest
 import math
 
 import torch
@@ -37,9 +36,9 @@ class AttentionLayer(nn.Module):
     ):
         super().__init__()
         self.similarity_norm = math.sqrt(dk)
-        self.query_xf = nn.Linear(dmodel, dk, False)
-        self.key_xf = nn.Linear(dmodel, dk, False)
-        self.value_xf = nn.Linear(dmodel, dv, False)
+        self.query_xform = nn.Linear(dmodel, dk, False)
+        self.key_xform = nn.Linear(dmodel, dk, False)
+        self.value_xform = nn.Linear(dmodel, dv, False)
         self.causal_mask = CausalMask()
         self.softmax = nn.Softmax(dim=2)
 
@@ -53,12 +52,13 @@ class AttentionLayer(nn.Module):
         -------
         Tensor(size=(batch, seq_len, dv))
         """
-        Q = self.query_xf(x)  # (batch, seq_len, dk)
-        K = self.key_xf(x)  # (batch, seq_len, dk)
-        V = self.value_xf(x)  # (batch, seq_len, dv)
-        KT = torch.transpose(K, 2, 1)
+        Q = self.query_xform(x)  # (batch, seq_len, dk)
+        K = self.key_xform(x)  # (batch, seq_len, dk)
+        V = self.value_xform(x)  # (batch, seq_len, dv)
+        KT = torch.transpose(K, 2, 1)  # (batch, dk, seq_len)
         E = torch.matmul(Q, KT) / self.similarity_norm  # (batch, seq_len, seq_len)
         E = self.causal_mask(E)
+        # E[i, j] = similarity between Q[i] and K[j], so want softmax over dim = -1.
         A = self.softmax(E)  # (batch, seq_len, seq_len)
         y = torch.matmul(A, V)  # (batch, seq_len, dv)
         return y
@@ -94,7 +94,7 @@ class MultiHeadAttentionLayer(nn.Module):
         -------
         Tensor(size=(batch, seq_len, dmodel))
         """
-        y = torch.cat([head(x) for head in self.heads], dim=-1)
+        y = torch.cat([head(x) for head in self.heads], dim=-1)  # batch x seq_len x (num_heads*dv)
         y = self.output_layer(y)
         return y
 
@@ -281,113 +281,3 @@ class LanguageModel(nn.Module):
         x = self.transfomer(x)
         x = self.output_layer(x)
         return x
-
-
-# pylint: disable=R0902
-class TransformTester(unittest.TestCase):
-    # TODO: Move these somewhere suitable
-    def setUp(self):
-        self.dmodel = 2
-        self.num_heads = 3
-        self.num_layers = 5
-        self.dim_feedforward = 7
-        self.batch_size = 11
-        self.seq_len = 13
-        self.dk = 17
-        self.dv = 19
-        self.dropout = 0.2
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.x = torch.randn((self.batch_size, self.seq_len, self.dmodel)).to(self.device)
-
-    def test_causal_mask(self):
-        dim = 2
-        x = torch.ones((dim, dim))
-        masked = CausalMask()(x)
-        self.assertEqual(masked[0, 0], 1)
-        self.assertTrue(masked[0, 1] < -999999999)
-        self.assertEqual(masked[1, 1], 1)
-        self.assertEqual(masked[1, 1], 1)
-
-    def test_attention_layer(self):
-        layer = AttentionLayer(
-            dmodel=self.dmodel,
-            dk=self.dk,
-            dv=self.dv,
-        ).to(self.device)
-        y = layer(self.x)
-        self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.dv))
-
-    def test_mh_attention_layer(self):
-        layer = MultiHeadAttentionLayer(
-            dmodel=self.dmodel,
-            num_heads=self.num_heads,
-            dk=self.dk,
-            dv=self.dv
-        ).to(self.device)
-        y = layer(self.x)
-        self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.dmodel))
-
-    def test_transformer_layer(self):
-        layer = TransformerLayer(
-            dmodel=self.dmodel,
-            num_heads=self.num_heads,
-            dim_feedforward=self.dim_feedforward,
-            dropout=self.dropout
-        ).to(self.device)
-        y = layer(self.x)
-        self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.dmodel))
-
-    def test_positionwise_ff(self):
-        ff = PositionwiseFeedForward(
-            dmodel=self.dmodel,
-            dhidden=self.dim_feedforward
-        ).to(self.device)
-        y = ff(self.x)
-        self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.dmodel))
-
-    def test_positional_encoder(self):
-        pe = PositionalEncoder().to(self.device)
-
-        x_even = torch.zeros((self.batch_size, self.seq_len, self.dmodel)).to(self.device)
-        self.assertEqual(pe(x_even).shape, x_even.shape)
-
-        x_odd = torch.zeros((self.batch_size, self.seq_len + 1, self.dmodel)).to(self.device)
-        self.assertEqual(pe(x_odd).shape, x_odd.shape)
-
-    def test_transformer(self):
-        tm = Transformer(
-            dmodel=self.dmodel,
-            num_heads=self.num_heads,
-            num_layers=self.num_layers,
-            dim_feedforward=self.dim_feedforward,
-            dropout_input=self.dropout,
-            dropout_hidden=self.dropout
-        ).to(self.device)
-        y = tm(self.x)
-        self.assertEqual(y.shape, (self.batch_size, self.seq_len, self.dmodel))
-
-    def test_language_model(self):
-        embedding_size = 2
-        num_heads = 3
-        num_layers = 5
-        dim_feedforward = 7
-        dim_feedforward = 11
-        seq_len = 13
-        batch = 17
-        vocab_size = 19
-        lm = LanguageModel(
-            embedding_size=embedding_size,
-            vocab_size=vocab_size,
-            num_heads=num_heads,
-            num_layers=num_layers,
-            dim_feedforward=dim_feedforward,
-            dropout_input=self.dropout,
-            dropout_hidden=self.dropout
-        ).to(self.device)
-        x = torch.randint(0, vocab_size, size=(batch, seq_len)).to(self.device)
-        y = lm(x)
-        self.assertEqual(y.shape, (batch, seq_len, vocab_size))
-
-
-if __name__ == "__main__":
-    unittest.main()
