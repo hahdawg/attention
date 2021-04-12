@@ -117,4 +117,5 @@ notebooks/checkpoints/
 *.h5
 *.lock
 *.npy
+*.json
 *.hdf
