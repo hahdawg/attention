@@ -1,7 +1,6 @@
 from collections import deque
 
 import numpy as np
-from numpy import mean
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,19 +9,28 @@ import attention.example.data as aed
 import attention.model as am
 
 
-def write_sentences(model, batch_size, maxlen, device):
+def write_sentences(
+    model: am.LanguageModel,
+    tokenizer: aed.BertWordPieceTokenizer,
+    batch_size: int,
+    max_tokens: int,
+    num_words_to_consider: int,
+    device: str
+):
+    """
+    Given a model, create batch_size sentences with length max_tokens.
+    """
     start_token = 101
     tokenizer = aed.load_tokenizer()
     softmax = nn.Softmax(dim=1)
     x = start_token*torch.ones(batch_size).reshape(-1, 1)
     model.eval()
-    N = 10
     with torch.no_grad():
-        for _ in range(maxlen):
+        for _ in range(max_tokens):
             x = x.long().to(device)
             logits = model(x)[:, -1, :]
             probs = softmax(logits).cpu().numpy()
-            cutoff = np.sort(probs, axis=1)[:, -N].reshape(-1, 1)
+            cutoff = np.sort(probs, axis=1)[:, -num_words_to_consider].reshape(-1, 1)
             probs[probs < cutoff] = 0
             probs /= probs.sum(axis=1).reshape(-1, 1)
             preds = [
@@ -37,23 +45,37 @@ def write_sentences(model, batch_size, maxlen, device):
 
 
 def main(
-    bg,
-    lr=1e-3,
-    logging_interval=500,
-    max_steps=100_000_000,
+    batch_size_tr: int = 16,
+    lr: float = 1e-3,
+    logging_interval: int = 1000,
+    max_steps: int = 100_000_000,
+    embedding_size: int = 128,
+    num_heads: int = 4,
+    num_layers: int = 3,
+    dim_feedforward: int = 1024,
+    dropout_input: int = 0.1,
+    dropout_hidden: int = 0.1,
+    batch_size_val: int = 5,
+    max_tokens_val: int = 20,
+    num_words_to_consider: int = 15,
 ):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    """
+    Train a model. At each logging interval display some sample sentences from the model.
+    """
+    batch_generator = aed.load_batch_generator(batch_size=batch_size_tr, num_epochs=max_steps)
     tokenizer = aed.load_tokenizer()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     vocab_size = tokenizer.get_vocab_size()
     print(f"Number of tokens: {vocab_size}")
     model = am.LanguageModel(
-        embedding_size=128,
+        embedding_size=embedding_size,
         vocab_size=vocab_size,
-        num_heads=4,
-        num_layers=3,
-        dim_feedforward=1024,
-        dropout_input=0.1,
-        dropout_hidden=0.1
+        num_heads=num_heads,
+        num_layers=num_layers,
+        dim_feedforward=dim_feedforward,
+        dropout_input=dropout_input,
+        dropout_hidden=dropout_hidden
     ).to(device)
     pad_token = tokenizer.token_to_id("[PAD]")
 
@@ -62,7 +84,9 @@ def main(
 
     running_loss_tr = deque(maxlen=logging_interval)
     running_acc_tr = deque(maxlen=logging_interval)
-    for step, batch in enumerate(bg):
+    baseline_loss = -np.log(1/vocab_size)
+    print(f"Starting training. Baseline loss from random guesser: {baseline_loss: 0.4f}")
+    for step, batch in enumerate(batch_generator):
         batch = batch.to(device)
         x = batch[:, :-1]
         y = batch[:, 1:].reshape(-1,)
@@ -83,10 +107,19 @@ def main(
         model.eval()
         if step % logging_interval == 0:
             with torch.no_grad():
-                loss_tr_mean = mean(running_loss_tr)
-                acc_tr_mean = mean(running_acc_tr)
-                print(f"[{step}]  loss-tr: {loss_tr_mean}  acc-tr: {acc_tr_mean}")
-                sample_sentences = write_sentences(model, batch_size=5, maxlen=40, device=device)
+                loss_tr_mean = np.mean(running_loss_tr)
+                acc_tr_mean = np.mean(running_acc_tr)
+                print(100*"-")
+                print(f"[{step}]  loss-tr: {loss_tr_mean: 0.5f}  acc-tr: {acc_tr_mean: 0.5f}")
+                print(100*"-")
+                sample_sentences = write_sentences(
+                    model=model,
+                    tokenizer=tokenizer,
+                    batch_size=batch_size_val,
+                    max_tokens=max_tokens_val,
+                    num_words_to_consider=num_words_to_consider,
+                    device=device
+                )
                 for i, sentence in enumerate(sample_sentences):
                     print(f"\t[sample {i}]: {sentence}")
 
@@ -94,3 +127,7 @@ def main(
             break
 
     return model
+
+
+if __name__ == "__main__":
+    main()

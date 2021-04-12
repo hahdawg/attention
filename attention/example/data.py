@@ -40,13 +40,11 @@ def write_sentences_to_disk() -> None:
 def load_sentences() -> List[str]:
     sentences = []
     with open(OUTPUT_PATH_RAW, "r") as f:
-        for i, line in enumerate(f):
+        for line in f:
             split = line.split(" ")
             num_words = len(split)
             if num_words < MAX_WORDS:
                 sentences.append(line)
-            if i > 100000:
-                break
     return sentences
 
 
