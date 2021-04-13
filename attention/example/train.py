@@ -65,7 +65,7 @@ def main(
     batch_size_val: int = 5,
     max_tokens_val: int = 30,
     num_tokens_to_consider: int = 15,
-):
+) -> am.LanguageModel:
     """
     Train a model. At each logging interval, generate some sample sentences.
     """
