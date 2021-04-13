@@ -1,4 +1,5 @@
 from collections import deque
+from typing import List
 
 import numpy as np
 import torch
@@ -14,23 +15,23 @@ def write_sentences(
     tokenizer: aed.BertWordPieceTokenizer,
     batch_size: int,
     max_tokens: int,
-    num_words_to_consider: int,
+    num_tokens_to_consider: int,
     device: str
-):
+) -> List[str]:
     """
     Given a model, create batch_size sentences with length max_tokens.
     """
     start_token = 101
     tokenizer = aed.load_tokenizer()
     softmax = nn.Softmax(dim=1)
-    x = start_token*torch.ones(batch_size).reshape(-1, 1)
     model.eval()
     with torch.no_grad():
+        x = start_token*torch.ones(batch_size).reshape(-1, 1)
         for _ in range(max_tokens):
             x = x.long().to(device)
             logits = model(x)[:, -1, :]
             probs = softmax(logits).cpu().numpy()
-            cutoff = np.sort(probs, axis=1)[:, -num_words_to_consider].reshape(-1, 1)
+            cutoff = np.sort(probs, axis=1)[:, -num_tokens_to_consider].reshape(-1, 1)
             probs[probs < cutoff] = 0
             probs /= probs.sum(axis=1).reshape(-1, 1)
             preds = [
@@ -39,28 +40,34 @@ def write_sentences(
             ]
             preds = torch.LongTensor(preds).to(device).reshape(-1, 1)
             x = torch.cat((x, preds), dim=1)
+        decoded = tokenizer.decode_batch(x.cpu().numpy())
 
-    x = tokenizer.decode_batch(x.cpu().numpy())
-    return x
+    sentences = [
+        s[:s.find(".") + 1]
+        if "." in s
+        else s
+        for s in decoded
+    ]
+    return sentences
 
 
 def main(
-    batch_size_tr: int = 16,
+    batch_size_tr: int = 32,
     lr: float = 1e-3,
     logging_interval: int = 1000,
     max_steps: int = 100_000_000,
-    embedding_size: int = 128,
-    num_heads: int = 4,
+    embedding_size: int = 256,
+    num_heads: int = 3,
     num_layers: int = 3,
     dim_feedforward: int = 1024,
     dropout_input: int = 0.1,
     dropout_hidden: int = 0.1,
     batch_size_val: int = 5,
-    max_tokens_val: int = 20,
-    num_words_to_consider: int = 15,
+    max_tokens_val: int = 30,
+    num_tokens_to_consider: int = 15,
 ):
     """
-    Train a model. At each logging interval display some sample sentences from the model.
+    Train a model. At each logging interval, generate some sample sentences.
     """
     batch_generator = aed.load_batch_generator(batch_size=batch_size_tr, num_epochs=max_steps)
     tokenizer = aed.load_tokenizer()
@@ -77,6 +84,8 @@ def main(
         dropout_input=dropout_input,
         dropout_hidden=dropout_hidden
     ).to(device)
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Number of trainable parameters: {num_params}")
     pad_token = tokenizer.token_to_id("[PAD]")
 
     loss_fcn = nn.CrossEntropyLoss(reduction="none")
@@ -102,10 +111,12 @@ def main(
         loss.backward()
         optimizer.step()
 
-        running_loss_tr.append(loss.item())
-        running_acc_tr.append(acc.item())
-        model.eval()
+        with torch.no_grad():
+            running_loss_tr.append(loss.detach().item())
+            running_acc_tr.append(acc.detach().item())
+
         if step % logging_interval == 0:
+            model.eval()
             with torch.no_grad():
                 loss_tr_mean = np.mean(running_loss_tr)
                 acc_tr_mean = np.mean(running_acc_tr)
@@ -117,11 +128,11 @@ def main(
                     tokenizer=tokenizer,
                     batch_size=batch_size_val,
                     max_tokens=max_tokens_val,
-                    num_words_to_consider=num_words_to_consider,
+                    num_tokens_to_consider=num_tokens_to_consider,
                     device=device
                 )
                 for i, sentence in enumerate(sample_sentences):
-                    print(f"\t[sample {i}]: {sentence}")
+                    print(f"  [sample {i}]: {sentence}")
 
         if step >= max_steps:
             break
