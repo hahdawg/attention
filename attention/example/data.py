@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 
 MAX_WORDS = 30
+MAX_TOKENS = 50
 DATA_PATH = "/home/hahdawg/projects/attention/attention/example/data"
 OUTPUT_PATH_RAW = join(DATA_PATH, "sentences.txt")
 BERT_PATH = join(DATA_PATH, "bert-base-uncased-vocab.txt")
@@ -70,6 +71,7 @@ def batch_generator(
     dataset = SentenceDataset(sentences)
     tokenizer = load_tokenizer()
     tokenizer.enable_padding()
+    tokenizer.enable_truncation(MAX_TOKENS)
     loader = DataLoader(
         dataset=dataset,
         batch_size=batch_size,
