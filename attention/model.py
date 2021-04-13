@@ -7,7 +7,7 @@ import torch.nn as nn
 
 class CausalMask(nn.Module):
     """
-    Given an square tensor x, add -inf to upper triangular elements (excluding diagonal).
+    Given a square tensor x, add -inf to upper triangular elements (excluding diagonal).
     """
     def forward(self, x: Tensor) -> Tensor:  # pylint: disable=R0201
         """
