@@ -222,10 +222,10 @@ class PositionalEncoder(nn.Module):
         Tensor(size=(batch, seq_len, dmodel))
         """
         _, seq_len, dmodel = x.shape
-        norm_factor = 1 / \
+        position_factor = 1 / \
             (10_000 ** (2*torch.arange(dmodel, device=x.device)/dmodel)).reshape(-1, 1)
         evens = torch.sin(
-            norm_factor * torch.arange(0, seq_len, 2, device=x.device)
+            position_factor * torch.arange(0, seq_len, 2, device=x.device)
         )  # dmodel x (seq_len / 2)
         # Need same number of odd and even terms. If seq_len is odd, there will be more evens than
         # odds, so add another odd term for dstack.
@@ -234,7 +234,7 @@ class PositionalEncoder(nn.Module):
         else:
             num_odds = seq_len + 1
         odds = torch.cos(
-            norm_factor * torch.arange(1, num_odds, 2, device=x.device)
+            position_factor * torch.arange(1, num_odds, 2, device=x.device)
         )  # dmodel x (seq_len / 2)
         # Reason for [:, :seq_len] at end: If seq_len is odd, we have one too many odds,
         # so drop the last one.
