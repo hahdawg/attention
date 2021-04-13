@@ -257,6 +257,7 @@ class LanguageModel(nn.Module):
         dropout_hidden: float = 0.1
     ):
         super().__init__()
+        self.embedding_scale = math.sqrt(embedding_size)
         self.embedding = nn.Embedding(vocab_size, embedding_size)
         self.positional_encoder = PositionalEncoder()
         self.transfomer = Transformer(
@@ -280,7 +281,7 @@ class LanguageModel(nn.Module):
         Tensor(size=(batch, seq_len, vocab_size))
             Return logits (NOT probabilities).
         """
-        x = self.embedding(x)
+        x = self.embedding(x)*self.embedding_scale
         x = self.positional_encoder(x)
         x = self.transfomer(x)
         x = self.output_layer(x)
