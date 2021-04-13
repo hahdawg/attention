@@ -58,7 +58,7 @@ class AttentionLayer(nn.Module):
         KT = torch.transpose(K, 2, 1)  # (batch, dk, seq_len)
         E = torch.matmul(Q, KT) / self.similarity_norm  # (batch, seq_len, seq_len)
         E = self.causal_mask(E)
-        # E[i, j] = similarity between Q[i] and K[j], so want softmax over dim = -1.
+        # E[i, j, k] = similarity between Q[j] and K[k] for batch i, so want softmax over dim = -1.
         A = self.softmax(E)  # (batch, seq_len, seq_len)
         y = torch.matmul(A, V)  # (batch, seq_len, dv)
         return y
