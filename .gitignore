@@ -118,4 +118,5 @@ notebooks/checkpoints/
 *.lock
 *.npy
 *.json
+*.tgz
 *.hdf
