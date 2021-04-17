@@ -1,4 +1,6 @@
 from collections import deque
+import logging
+import logging.config as lc
 from typing import List
 
 import numpy as np
@@ -6,13 +8,48 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-import attention.example.data as aed
+import attention.example.prepdata as prep
+import attention.example.generator as gen
 import attention.model as am
+
+
+def init_logging(log_path="/tmp/language_model.log"):
+    logging_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        'formatters': {
+            'standard': {
+                'format': '%(asctime)s %(levelname)-4s: %(message)s',
+                "datefmt": "%Y-%m-%d %H:%M:%S"
+            }
+        },
+        "handlers": {
+            "console": {
+                "level": "INFO",
+                "class": "logging.StreamHandler",
+                "formatter": "standard"
+            },
+            "file": {
+                "level": "INFO",
+                "class": "logging.FileHandler",
+                "filename": log_path,
+                "formatter": "standard"
+            }
+
+        },
+        "loggers": {
+            "": {"handlers": ["console", "file"], "level": "INFO"}
+        }
+    }
+    lc.dictConfig(logging_config)
+
+
+logger = logging.getLogger(__name__)
 
 
 def write_sentences(
     model: am.LanguageModel,
-    tokenizer: aed.BertWordPieceTokenizer,
+    tokenizer: prep.BertWordPieceTokenizer,
     batch_size: int,
     max_tokens: int,
     num_tokens_to_consider: int,
@@ -22,7 +59,6 @@ def write_sentences(
     Given a model, create batch_size sentences with length max_tokens.
     """
     start_token = 101
-    tokenizer = aed.load_tokenizer()
     softmax = nn.Softmax(dim=1)
     model.eval()
     with torch.no_grad():
@@ -51,6 +87,7 @@ def write_sentences(
     return sentences
 
 
+# pylint: disable=W1203
 def main(
     batch_size_tr: int = 32,
     lr: float = 1e-3,
@@ -69,12 +106,12 @@ def main(
     """
     Train a model. At each logging interval, generate some sample sentences.
     """
-    batch_generator = aed.load_batch_generator(batch_size=batch_size_tr, num_epochs=max_steps)
-    tokenizer = aed.load_tokenizer()
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    batch_generator = gen.compute_batch_generator(batch_size=batch_size_tr, num_epochs=max_steps)
+    tokenizer = prep.compute_tokenizer()
     vocab_size = tokenizer.get_vocab_size()
-    print(f"Number of tokens: {vocab_size}")
+    logger.info(f"Number of tokens: {vocab_size}")
     model = am.LanguageModel(
         embedding_size=embedding_size,
         vocab_size=vocab_size,
@@ -85,7 +122,7 @@ def main(
         dropout_hidden=dropout_hidden
     ).to(device)
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Number of trainable parameters: {num_params}")
+    logger.info(f"Number of trainable parameters: {num_params}")
     pad_token = tokenizer.token_to_id("[PAD]")
 
     loss_fcn = nn.CrossEntropyLoss(reduction="none")
@@ -94,7 +131,7 @@ def main(
     running_loss_tr = deque(maxlen=logging_interval)
     running_acc_tr = deque(maxlen=logging_interval)
     baseline_loss = -np.log(1/vocab_size)
-    print(f"Starting training. Baseline loss from random guesser: {baseline_loss: 0.4f}")
+    logger.info(f"Starting training. Baseline loss from random guesser: {baseline_loss: 0.4f}")
     for step, batch in enumerate(batch_generator):
         batch = batch.to(device)
         x = batch[:, :-1]
@@ -120,9 +157,9 @@ def main(
             with torch.no_grad():
                 loss_tr_mean = np.mean(running_loss_tr)
                 acc_tr_mean = np.mean(running_acc_tr)
-                print(100*"-")
-                print(f"[{step}]  loss-tr: {loss_tr_mean: 0.5f}  acc-tr: {acc_tr_mean: 0.5f}")
-                print(100*"-")
+                logger.info(100*"-")
+                logger.info(f"[{step}]  loss-tr: {loss_tr_mean: 0.5f}  acc-tr: {acc_tr_mean: 0.5f}")
+                logger.info(100*"-")
                 sample_sentences = write_sentences(
                     model=model,
                     tokenizer=tokenizer,
@@ -132,7 +169,7 @@ def main(
                     device=device
                 )
                 for i, sentence in enumerate(sample_sentences):
-                    print(f"  [sample {i}]: {sentence}")
+                    logger.info(f"[sample {i}]:  {sentence}")
 
         if step >= max_steps:
             break
@@ -141,4 +178,5 @@ def main(
 
 
 if __name__ == "__main__":
+    init_logging()
     main()
