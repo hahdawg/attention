@@ -91,7 +91,7 @@ def write_sentences(
 def main(
     batch_size_tr: int = 32,
     lr: float = 1e-3,
-    logging_interval: int = 1000,
+    logging_interval: int = 2500,
     max_steps: int = 100_000_000,
     embedding_size: int = 256,
     num_heads: int = 3,
@@ -169,7 +169,7 @@ def main(
                     device=device
                 )
                 for i, sentence in enumerate(sample_sentences):
-                    logger.info(f"[sample {i}]:  {sentence}")
+                    logger.info(f"[sample {i}] {sentence}")
 
         if step >= max_steps:
             break
