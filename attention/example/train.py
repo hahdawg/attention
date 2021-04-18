@@ -90,13 +90,13 @@ def write_sentences(
 # pylint: disable=W1203
 def main(
     batch_size_tr: int = 32,
-    lr: float = 1e-3,
-    logging_interval: int = 2500,
+    num_warmup_steps: int = 4000,
+    logging_interval: int = 1000,
     max_steps: int = 100_000_000,
     embedding_size: int = 256,
-    num_heads: int = 3,
-    num_layers: int = 3,
-    dim_feedforward: int = 1024,
+    num_heads: int = 5,
+    num_layers: int = 5,
+    dim_feedforward: int = 512,
     dropout_input: int = 0.1,
     dropout_hidden: int = 0.1,
     batch_size_val: int = 5,
@@ -126,13 +126,17 @@ def main(
     pad_token = tokenizer.token_to_id("[PAD]")
 
     loss_fcn = nn.CrossEntropyLoss(reduction="none")
-    optimizer = optim.Adam(lr=lr, params=model.parameters())
+    optimizer = optim.Adam(lr=0.0, params=model.parameters())
 
     running_loss_tr = deque(maxlen=logging_interval)
     running_acc_tr = deque(maxlen=logging_interval)
     baseline_loss = -np.log(1/vocab_size)
     logger.info(f"Starting training. Baseline loss from random guesser: {baseline_loss: 0.4f}")
     for step, batch in enumerate(batch_generator):
+        for g in optimizer.param_groups:
+            lr = embedding_size**(-0.5) \
+                * min((step + 1)**(-0.5), (step + 1)*num_warmup_steps**(-1.5))
+            g["lr"] = lr
         batch = batch.to(device)
         x = batch[:, :-1]
         y = batch[:, 1:].reshape(-1,)
@@ -158,7 +162,9 @@ def main(
                 loss_tr_mean = np.mean(running_loss_tr)
                 acc_tr_mean = np.mean(running_acc_tr)
                 logger.info(100*"-")
-                logger.info(f"[{step}]  loss-tr: {loss_tr_mean: 0.5f}  acc-tr: {acc_tr_mean: 0.5f}")
+                msg = f"[{step}]  loss-tr: {loss_tr_mean: 0.5f}  " \
+                    + f"acc-tr: {acc_tr_mean: 0.5f}   lr: {lr: 0.8f}"
+                logger.info(msg)
                 logger.info(100*"-")
                 sample_sentences = write_sentences(
                     model=model,
