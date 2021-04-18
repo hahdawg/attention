@@ -239,7 +239,7 @@ class PositionalEncoder(nn.Module):
         # Reason for [:, :seq_len] at end: If seq_len is odd, we have one too many odds,
         # so drop the last one.
         embedding = torch.dstack((evens, odds)).reshape(dmodel, -1)[:, :seq_len]  # dmodel x seq_len
-        return x + embedding.T
+        return embedding.T  # seq_len x dmodel
 
 
 class LanguageModel(nn.Module):
@@ -281,8 +281,9 @@ class LanguageModel(nn.Module):
         Tensor(size=(batch, seq_len, vocab_size))
             Return logits (NOT probabilities).
         """
-        embedded = self.embedding(x)
-        y = embedded*self.embedding_scale + self.positional_encoder(embedded)
+        word_embed = self.embedding(x)
+        position_embed = self.positional_encoder(word_embed)
+        y = word_embed*self.embedding_scale + position_embed
         y = self.transfomer(y)
         y = self.output_layer(y)
         return y
