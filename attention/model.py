@@ -281,8 +281,8 @@ class LanguageModel(nn.Module):
         Tensor(size=(batch, seq_len, vocab_size))
             Return logits (NOT probabilities).
         """
-        x = self.embedding(x)*self.embedding_scale
-        x = self.positional_encoder(x)
-        x = self.transfomer(x)
-        x = self.output_layer(x)
-        return x
+        embedded = self.embedding(x)
+        y = embedded*self.embedding_scale + self.positional_encoder(embedded)
+        y = self.transfomer(y)
+        y = self.output_layer(y)
+        return y
