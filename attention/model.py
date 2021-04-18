@@ -282,8 +282,8 @@ class LanguageModel(nn.Module):
             Return logits (NOT probabilities).
         """
         word_embed = self.embedding(x)
-        position_embed = self.positional_encoder(word_embed)
-        y = word_embed*self.embedding_scale + position_embed
+        position_encode = self.positional_encoder(word_embed)
+        y = word_embed*self.embedding_scale + position_encode
         y = self.transfomer(y)
         y = self.output_layer(y)
         return y
