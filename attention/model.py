@@ -209,7 +209,7 @@ class Transformer(nn.Module):
 
 class PositionalEncoder(nn.Module):
     """
-    Adds positional information to an embedding tensor x.
+    Calculate positional info from an embedding tensor x.
     """
     def forward(self, x: Tensor) -> Tensor:  # pylint: disable=R0201
         """
