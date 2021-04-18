@@ -11,6 +11,7 @@ from tqdm import tqdm
 # ############################################################################################
 #  NOTE: Download JSON data from https://www.yelp.com/dataset/download and put it in DATA_DIR.
 # ############################################################################################
+MIN_WORDS = 2
 MAX_WORDS = 30
 DATA_DIR = "/home/hahdawg/projects/attention/attention/example/data"
 
@@ -65,9 +66,10 @@ def compute_yelp(use_cached=True) -> List[str]:
             sentences = review.split(".")
             for sentence in sentences:
                 sentence = sentence.strip().replace("\n", "")
+                num_chars = len(sentence)
                 num_words = len(sentence.split(" "))
-                if 0 < num_words <= MAX_WORDS:
-                    output.append(sentence)
+                if num_chars and (MIN_WORDS <= num_words <= MAX_WORDS):
+                    output.append(f"{sentence}.")
 
     with open(output_path, "wb") as f:
         pickle.dump(output, f)
