@@ -90,7 +90,7 @@ def write_sentences(
 # pylint: disable=W1203
 def main(
     batch_size_tr: int = 16,
-    num_warmup_steps: int = 5000,
+    num_warmup_steps: int = 10000,
     logging_interval: int = 1000,
     max_steps: int = 1_000_000,
     embedding_size: int = 256,
@@ -112,6 +112,7 @@ def main(
     tokenizer = prep.compute_tokenizer()
     vocab_size = tokenizer.get_vocab_size()
     logger.info(f"Number of tokens: {vocab_size}")
+
     model = am.LanguageModel(
         embedding_size=embedding_size,
         vocab_size=vocab_size,
@@ -121,8 +122,10 @@ def main(
         dropout_input=dropout_input,
         dropout_hidden=dropout_hidden
     ).to(device)
+
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"Number of trainable parameters: {num_params}")
+
     pad_token = tokenizer.token_to_id("[PAD]")
 
     loss_fcn = nn.CrossEntropyLoss(reduction="none")
