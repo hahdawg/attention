@@ -89,8 +89,8 @@ def write_sentences(
 
 # pylint: disable=W1203
 def main(
-    batch_size_tr: int = 32,
-    num_warmup_steps: int = 4000,
+    batch_size_tr: int = 16,
+    num_warmup_steps: int = 5000,
     logging_interval: int = 1000,
     max_steps: int = 1_000_000,
     embedding_size: int = 256,
